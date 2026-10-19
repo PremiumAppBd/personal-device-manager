@@ -14,7 +14,14 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
-    launchOptions: { executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] },
+    launchOptions: {
+      // Use the preinstalled browser when PW_CHROMIUM_PATH is set (sandbox env);
+      // otherwise Playwright uses its managed download (CI: `playwright install`).
+      ...(process.env.PW_CHROMIUM_PATH
+        ? { executablePath: process.env.PW_CHROMIUM_PATH }
+        : {}),
+      args: ["--no-sandbox"],
+    },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
