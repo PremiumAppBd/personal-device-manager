@@ -1,0 +1,46 @@
+# Cloudflare Worker configuration for the PDM API.
+#
+# IMPORTANT: database_id / bucket names below are PLACEHOLDERS. Run the
+# provisioning commands in infrastructure/cloudflare/README.md to create real
+# resources, then paste the generated database_id here. Do NOT commit secrets
+# (OWNER_SESSION_SECRET etc.) — set them with `wrangler secret put`.
+
+name = "pdm-api"
+main = "src/index.ts"
+compatibility_date = "2024-11-06"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+# ---- Non-secret vars (safe to commit). Secrets go via `wrangler secret put`. ----
+[vars]
+ENVIRONMENT = "development"
+# Cloudflare Access (optional production front door). Leave blank to disable.
+CF_ACCESS_TEAM_DOMAIN = ""
+CF_ACCESS_AUD = ""
+
+# ---- D1 database ----
+[[d1_databases]]
+binding = "DB"
+database_name = "pdm_db"
+database_id = "00000000-0000-0000-0000-000000000000" # placeholder; replace after `wrangler d1 create`
+migrations_dir = "migrations"
+
+# ---- R2 (private media storage; FUTURE PHASE, binding placeholder) ----
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "pdm-media"
+
+# ---- Durable Objects (WebRTC signaling; FUTURE PHASE, binding placeholder) ----
+[[durable_objects.bindings]]
+name = "SIGNALING"
+class_name = "SignalingRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SignalingRoom"]
+
+# ---- Production environment overrides ----
+[env.production]
+workers_dev = false
+[env.production.vars]
+ENVIRONMENT = "production"

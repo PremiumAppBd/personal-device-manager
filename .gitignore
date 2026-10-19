@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+apps/dashboard/dist/
+apps/api/dist/
+
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+wrangler.local.toml
+
+# Secrets & environment — NEVER commit real values
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/testdata/*.pub
+secrets/
+
+# Android
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
+apps/android/.idea/
+apps/android/captures/
+apps/android/*.keystore
+apps/android/*.jks
+apps/android/app/release/
+*.apk
+*.aab
+
+# Logs / coverage / caches
+*.log
+npm-debug.log*
+coverage/
+.vitest/
+.turbo/
+.cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
