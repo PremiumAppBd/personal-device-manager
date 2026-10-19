@@ -1,0 +1,69 @@
+import type {
+  AuditLogView,
+  DeviceRequestType,
+  DeviceRequestView,
+  DeviceStatusView,
+  DeviceView,
+  PairingChallengeView,
+} from "@pdm/shared";
+
+export type {
+  AuditLogView,
+  DeviceRequestView,
+  DeviceStatusView,
+  DeviceView,
+  PairingChallengeView,
+};
+
+export interface OwnerProfile {
+  id: string;
+  email: string;
+}
+
+export interface LoginResult {
+  token: string;
+  expiresInSeconds: number;
+  owner: OwnerProfile;
+}
+
+export interface DeviceSettingsInput {
+  statusIntervalSeconds?: number;
+  cameraFeatureEnabled?: boolean;
+  smsFeatureEnabled?: boolean;
+  diagnosticsEnabled?: boolean;
+}
+
+/** The single abstraction both the real API and the mock source implement. */
+export interface DataSource {
+  readonly kind: "live" | "demo";
+  login(email: string, password: string): Promise<LoginResult>;
+  me(token: string): Promise<OwnerProfile>;
+  listDevices(token: string): Promise<DeviceView[]>;
+  getDevice(token: string, id: string): Promise<DeviceView>;
+  updateDeviceLabel(token: string, id: string, label: string): Promise<DeviceView>;
+  revokeDevice(token: string, id: string): Promise<void>;
+  updateSettings(
+    token: string,
+    id: string,
+    input: DeviceSettingsInput,
+  ): Promise<DeviceView["settings"]>;
+  getStatusHistory(token: string, id: string): Promise<DeviceStatusView[]>;
+  listRequests(token: string, id: string): Promise<DeviceRequestView[]>;
+  createRequest(
+    token: string,
+    id: string,
+    type: DeviceRequestType,
+  ): Promise<DeviceRequestView>;
+  createPairing(token: string, label?: string): Promise<PairingChallengeView>;
+  listAudit(token: string): Promise<AuditLogView[]>;
+}
+
+export class ApiClientError extends Error {
+  readonly code: string;
+  readonly status: number;
+  constructor(code: string, message: string, status: number) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}

@@ -53,3 +53,8 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# Playwright
+apps/dashboard/playwright-report/
+apps/dashboard/test-results/
+apps/dashboard/.playwright/
