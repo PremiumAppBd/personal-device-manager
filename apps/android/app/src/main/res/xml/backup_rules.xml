@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Do not back up the encrypted config or local DB off-device. -->
+<full-backup-content>
+    <exclude domain="database" />
+    <exclude domain="sharedpref" />
+    <exclude domain="file" path="datastore/" />
+</full-backup-content>
