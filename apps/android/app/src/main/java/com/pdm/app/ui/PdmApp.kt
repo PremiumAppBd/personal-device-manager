@@ -2,6 +2,7 @@ package com.pdm.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -15,6 +16,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
+import com.pdm.app.camera.CameraForegroundService
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -36,6 +45,7 @@ object Routes {
     const val PAIRING = "pairing"
     const val DEVICE_INFO = "device_info"
     const val MONITORING = "monitoring"
+    const val CAMERA_MODE = "camera_mode"
     const val PERMISSIONS = "permissions"
     const val SECURITY = "security"
 }
@@ -47,6 +57,7 @@ fun PdmApp(vm: AppViewModel, nav: NavHostController = rememberNavController()) {
         composable(Routes.PAIRING) { PairingScreen(vm, nav) }
         composable(Routes.DEVICE_INFO) { DeviceInfoScreen(vm, nav) }
         composable(Routes.MONITORING) { MonitoringScreen(vm, nav) }
+        composable(Routes.CAMERA_MODE) { CameraModeScreen(nav) }
         composable(Routes.PERMISSIONS) { PermissionCenterScreen(nav) }
         composable(Routes.SECURITY) { SecuritySettingsScreen(vm, nav) }
     }
@@ -94,6 +105,9 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
             } else {
                 Button(onClick = { nav.navigate(Routes.MONITORING) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Monitoring")
+                }
+                OutlinedButton(onClick = { nav.navigate(Routes.CAMERA_MODE) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Camera mode")
                 }
                 OutlinedButton(onClick = { nav.navigate(Routes.DEVICE_INFO) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Device information")
@@ -243,6 +257,73 @@ fun SecuritySettingsScreen(vm: AppViewModel, @Suppress("UNUSED_PARAMETER") nav: 
                     Text("Reset / unenroll this device")
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun CameraModeScreen(@Suppress("UNUSED_PARAMETER") nav: NavHostController) {
+    val context = LocalContext.current
+    var running by remember { mutableStateOf(false) }
+    var useFront by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            CameraForegroundService.start(context, useFront)
+            running = true
+            note = "Camera mode started. A persistent notification is shown while active."
+        } else {
+            note = "Camera permission is required to use camera mode."
+        }
+    }
+
+    fun startCamera() {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.CAMERA,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            CameraForegroundService.start(context, useFront)
+            running = true
+            note = "Camera mode started. A persistent notification is shown while active."
+        } else {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    ScreenScaffold("Camera mode") { m ->
+        Column(m, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                "Use this device you own as a private camera. While active, the " +
+                    "system shows a camera indicator and this app keeps an ongoing " +
+                    "notification. Frames upload only while you have an active viewer " +
+                    "on your dashboard, and the camera owner enabled the camera " +
+                    "setting there. Nothing is hidden.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Switch(checked = useFront, onCheckedChange = { useFront = it }, enabled = !running)
+                Text("  Use front camera", style = MaterialTheme.typography.bodyMedium)
+            }
+            if (!running) {
+                Button(onClick = { startCamera() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Start camera mode")
+                }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        CameraForegroundService.stop(context)
+                        running = false
+                        note = "Camera mode stopped."
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Stop camera mode")
+                }
+            }
+            note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }

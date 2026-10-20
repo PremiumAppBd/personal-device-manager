@@ -69,6 +69,13 @@ class ApiException(val code: String, message: String, val httpStatus: Int = 0) :
     Exception(message)
 
 @Serializable
+data class CameraActiveDto(
+    val active: Boolean = false,
+    val sessionId: String? = null,
+    val intervalSeconds: Int = 3,
+)
+
+@Serializable
 data class DeviceRequestDto(
     val id: String,
     val type: String,

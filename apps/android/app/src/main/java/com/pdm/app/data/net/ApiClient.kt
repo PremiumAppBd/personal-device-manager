@@ -125,9 +125,37 @@ class ApiClient(
         signedPost("/device/requests/$requestId", deviceId, body)
     }
 
+    /** Whether the owner has an active camera session for this device. */
+    suspend fun cameraActive(): CameraActiveDto = withContext(Dispatchers.IO) {
+        val deviceId = config.deviceId() ?: throw ApiException("not_enrolled", "device not enrolled")
+        val data = signedGet("/device/camera/active", deviceId)
+        json.decodeFromString(CameraActiveDto.serializer(), data.toString())
+    }
+
+    /** Upload a single JPEG snapshot (raw bytes) for the active camera session. */
+    suspend fun uploadSnapshot(jpeg: ByteArray): Unit = withContext(Dispatchers.IO) {
+        val deviceId = config.deviceId() ?: throw ApiException("not_enrolled", "device not enrolled")
+        signedPostBytes("/device/camera/snapshot", deviceId, jpeg, "image/jpeg")
+    }
+
     private fun signedPost(path: String, deviceId: String, body: String): JsonObject {
         val headers = signHeaders("POST", path, deviceId, body.toByteArray(Charsets.UTF_8))
         val builder = Request.Builder().url(url(path)).post(body.toRequestBody(jsonMedia))
+        headers.forEach { (k, v) -> builder.header(k, v) }
+        http.newCall(builder.build()).execute().use { res ->
+            return unwrap(res.body?.string().orEmpty(), res.code)
+        }
+    }
+
+    private fun signedPostBytes(
+        path: String,
+        deviceId: String,
+        bytes: ByteArray,
+        contentType: String,
+    ): JsonObject {
+        val headers = signHeaders("POST", path, deviceId, bytes)
+        val media = contentType.toMediaType()
+        val builder = Request.Builder().url(url(path)).post(bytes.toRequestBody(media))
         headers.forEach { (k, v) -> builder.header(k, v) }
         http.newCall(builder.build()).execute().use { res ->
             return unwrap(res.body?.string().orEmpty(), res.code)

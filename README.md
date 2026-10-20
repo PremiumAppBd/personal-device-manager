@@ -5,10 +5,11 @@ through a secure web dashboard. It does device enrollment, per-device
 authentication, and non-sensitive monitoring (battery, storage, network), plus
 a command queue, settings, and an audit log.
 
-> **Scope note.** This project does **not** implement remote camera capture,
-> live video, snapshots, or SMS reading. Those were intentionally left out
-> because a remotely controlled, sideloaded capture tool is surveillance
-> tooling. What ships here is device management only.
+> **Scope note.** PDM includes an **overt, own-device camera mode**: a phone
+> you own can act as a private camera you view from your dashboard, with a
+> visible notification and the system camera indicator always on (no hidden
+> capture). See `docs/camera.md`. It does **not** implement hidden/stealth
+> capture or any SMS reading, by design.
 
 ## What's in the repo
 
@@ -192,6 +193,7 @@ would ever cost money.
 
 ## Documentation
 
+- `docs/camera.md` — use your own phone as a private camera
 - `docs/local-development.md` — local run, in depth
 - `docs/deployment.md` — Cloudflare deploy, in depth
 - `docs/api-testing.md` — every endpoint, with examples

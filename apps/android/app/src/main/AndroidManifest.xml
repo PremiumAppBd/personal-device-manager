@@ -15,6 +15,17 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!--
+      Camera (own-device camera mode). CAMERA is requested at runtime and only
+      when the owner turns the feature on. The camera runs in a VISIBLE,
+      typed foreground service so Android shows the ongoing notification and the
+      system camera indicator; there is no hidden capture.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <application
         android:name=".PdmApplication"
         android:allowBackup="true"
@@ -34,6 +45,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Visible camera foreground service (own-device camera mode). -->
+        <service
+            android:name=".camera.CameraForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
 
         <!-- Reschedules the status-sync work after a device reboot. -->
         <receiver

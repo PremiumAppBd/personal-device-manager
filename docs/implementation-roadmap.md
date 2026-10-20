@@ -21,7 +21,7 @@ and instrumentation are documented as not-run.
 | 11 | Dashboard builds | PASS | `vite build` (110 modules) |
 | 12 | Mock mode isolated from production | PASS | source-selection unit test; no live->mock path |
 | 13 | No secrets committed | PASS | only `.dev.vars.example`; `.gitignore` + CI secret scan |
-| 14 | Unit + integration tests pass | PASS | 7 shared + 19 API + 5 dashboard unit + 2 e2e |
+| 14 | Unit + integration tests pass | PASS | 7 shared + 23 API + 5 dashboard unit + 3 e2e |
 | 15 | Hardware-dependent tests documented | PASS | this table + below |
 
 ### Not run in this environment (require external dependencies)
@@ -34,16 +34,27 @@ and instrumentation are documented as not-run.
   No remote resources were provisioned (by rule).
 - **Cloudflare Access end-to-end** — needs a configured Access application.
 
-## Scope decision: remote camera and SMS are not implemented
+## Scope decision: overt own-device camera yes; stealth and SMS no
 
-The owner confirmed this deployment is Cloudflare-based device monitoring. The
-remote camera capture, live video, snapshots, and SMS collection features are
-**intentionally not built** in this repository. A remotely controlled,
-sideloaded capture agent is surveillance tooling, so this project stops at
-device management: enrollment, authentication, non-sensitive monitoring,
-commands, settings, and audit. The schema and interfaces below remain as
-placeholders only; the command queue rejects camera/SMS request types with
-`feature_disabled`, and the Android build acknowledges them as "not supported".
+The owner's use case is running a spare phone **they own** as a private
+camera/CCTV that they view from their own dashboard. That is an overt,
+owner-operated use (like Alfred Camera / IP Webcam), so an **overt** camera
+mode is implemented:
+
+- Capture runs in a VISIBLE foreground service typed `camera`, with an ongoing
+  notification and the system camera indicator; it starts only when the owner
+  turns it on, and uploads only while an owner session is active.
+- It is gated behind the device's `cameraFeatureEnabled` consent flag.
+- Remote viewing is snapshot-based (near-live frame refresh). Full WebRTC live
+  video is a separate future effort that needs a real device to build/verify.
+
+What is still **intentionally not built**, and should not be:
+
+- Hidden / stealth / disguised operation, icon hiding, or background capture
+  without the notification + indicator. (This is the line between a camera app
+  and stalkerware.)
+- SMS reading / collection / summaries. The `smsFeatureEnabled` flag is a
+  reserved placeholder only.
 
 ## Future-phase placeholders (interfaces only; not to be built as remote capture)
 
