@@ -392,3 +392,52 @@ describe("feature gating + settings + audit", () => {
     expect(items.some((i) => i.action === "device.enrolled")).toBe(true);
   });
 });
+
+describe("command queue round-trip (owner -> device -> owner)", () => {
+  it("delivers a ping to the device and reflects completion back to the owner", async () => {
+    const owner = await seedOwner();
+    const token = await login(SELF, owner.email, owner.password);
+    const keys = await generateDeviceKeys();
+    const { deviceId } = await enrollDevice(SELF, token, keys);
+
+    // Owner creates a ping command.
+    const created = await SELF.fetch(url(`/devices/${deviceId}/requests`), {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ type: "ping" }),
+    });
+    expect(created.status).toBe(201);
+    const requestId = (await jsonOf(created)).data.id as string;
+
+    // Device polls (signed GET) and sees the pending request.
+    const pollPath = `${base}/device/requests`;
+    const pollHeaders = await signedHeaders(keys, deviceId, "GET", pollPath, "");
+    const polled = await SELF.fetch(url("/device/requests"), { headers: pollHeaders });
+    expect(polled.status).toBe(200);
+    const pending = (await jsonOf(polled)).data.requests as Array<{ id: string; type: string }>;
+    expect(pending.some((r) => r.id === requestId && r.type === "ping")).toBe(true);
+
+    // Device acknowledges completion (signed POST).
+    const ackBody = JSON.stringify({ status: "completed", resultSummary: "pong" });
+    const ackPath = `${base}/device/requests/${requestId}`;
+    const ackHeaders = await signedHeaders(keys, deviceId, "POST", ackPath, ackBody);
+    const ack = await SELF.fetch(url(`/device/requests/${requestId}`), {
+      method: "POST",
+      headers: ackHeaders,
+      body: ackBody,
+    });
+    expect(ack.status).toBe(200);
+
+    // Owner sees the request as completed.
+    const list = await SELF.fetch(url(`/devices/${deviceId}/requests`), {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const reqs = (await jsonOf(list)).data.requests as Array<{ id: string; status: string }>;
+    expect(reqs.find((r) => r.id === requestId)?.status).toBe("completed");
+  });
+
+  it("rejects an unsigned device poll", async () => {
+    const res = await SELF.fetch(url("/device/requests"));
+    expect(res.status).toBe(401);
+  });
+});

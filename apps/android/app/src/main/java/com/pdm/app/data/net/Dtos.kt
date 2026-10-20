@@ -69,6 +69,19 @@ class ApiException(val code: String, message: String, val httpStatus: Int = 0) :
     Exception(message)
 
 @Serializable
+data class DeviceRequestDto(
+    val id: String,
+    val type: String,
+    val status: String,
+)
+
+@Serializable
+data class DeviceRequestsResponse(val requests: List<DeviceRequestDto> = emptyList())
+
+@Serializable
+data class UpdateRequestBody(val status: String, val resultSummary: String? = null)
+
+@Serializable
 data class HealthData(
     val service: String,
     val status: String,

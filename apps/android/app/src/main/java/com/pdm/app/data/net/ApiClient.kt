@@ -104,6 +104,27 @@ class ApiClient(
         json.decodeFromString(DeviceSettingsDto.serializer(), data.toString())
     }
 
+    /** Fetch pending/acknowledged command requests for this device. */
+    suspend fun fetchRequests(): List<DeviceRequestDto> = withContext(Dispatchers.IO) {
+        val deviceId = config.deviceId() ?: throw ApiException("not_enrolled", "device not enrolled")
+        val data = signedGet("/device/requests", deviceId)
+        json.decodeFromString(DeviceRequestsResponse.serializer(), data.toString()).requests
+    }
+
+    /** Report a command request's outcome (acknowledged/completed/failed). */
+    suspend fun updateRequest(
+        requestId: String,
+        status: String,
+        resultSummary: String? = null,
+    ): Unit = withContext(Dispatchers.IO) {
+        val deviceId = config.deviceId() ?: throw ApiException("not_enrolled", "device not enrolled")
+        val body = json.encodeToString(
+            UpdateRequestBody.serializer(),
+            UpdateRequestBody(status, resultSummary),
+        )
+        signedPost("/device/requests/$requestId", deviceId, body)
+    }
+
     private fun signedPost(path: String, deviceId: String, body: String): JsonObject {
         val headers = signHeaders("POST", path, deviceId, body.toByteArray(Charsets.UTF_8))
         val builder = Request.Builder().url(url(path)).post(body.toRequestBody(jsonMedia))

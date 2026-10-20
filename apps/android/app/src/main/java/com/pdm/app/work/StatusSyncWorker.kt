@@ -63,7 +63,46 @@ class StatusSyncWorker(appContext: Context, params: WorkerParameters) :
                 return Result.retry()
             }
         }
+
+        // 3) Process any owner->device commands (non-sensitive only).
+        try {
+            processCommands(container)
+        } catch (_: Exception) {
+            // Command processing is best-effort; status sync already succeeded.
+        }
         return Result.success()
+    }
+
+    private suspend fun processCommands(
+        container: com.pdm.app.AppContainer,
+    ) {
+        val requests = container.api.fetchRequests()
+        for (req in requests) {
+            when (req.type) {
+                "ping" ->
+                    container.api.updateRequest(req.id, "completed", "pong")
+
+                "refresh_status" -> {
+                    val sample = container.collector.collect(container.config.nextSequence())
+                    container.api.reportStatus(sample)
+                    container.api.updateRequest(req.id, "completed", "status refreshed")
+                }
+
+                "sync_settings" -> {
+                    container.api.fetchSettings()
+                    container.api.updateRequest(req.id, "completed", "settings synced")
+                }
+
+                else ->
+                    // Camera/SMS and any unknown types are not supported by this
+                    // build; acknowledge as failed rather than acting on them.
+                    container.api.updateRequest(
+                        req.id,
+                        "failed",
+                        "request type not supported in this build",
+                    )
+            }
+        }
     }
 
     companion object {
