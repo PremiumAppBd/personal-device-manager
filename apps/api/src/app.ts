@@ -9,6 +9,7 @@ import { authRoutes } from "./routes/auth.js";
 import { pairingRoutes } from "./routes/pairing.js";
 import { deviceRoutes } from "./routes/devices.js";
 import { deviceSelfRoutes } from "./routes/device-self.js";
+import { cameraRoutes } from "./routes/camera.js";
 import { auditRoutes } from "./routes/audit.js";
 
 export function createApp(): Hono<{ Bindings: Env; Variables: Vars }> {
@@ -35,6 +36,7 @@ export function createApp(): Hono<{ Bindings: Env; Variables: Vars }> {
   api.route("/", pairingRoutes);
   api.route("/", deviceRoutes);
   api.route("/", deviceSelfRoutes);
+  api.route("/", cameraRoutes);
   api.route("/", auditRoutes);
 
   app.route(API_BASE_PATH, api);

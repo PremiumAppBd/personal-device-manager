@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import {
+  CAMERA,
   reportStatusSchema,
   updateDeviceRequestSchema,
   type DeviceRequestView,
@@ -122,6 +123,89 @@ deviceSelfRoutes.get("/device/requests", async (c) => {
     expiresAt: new Date(r.expires_at).toISOString(),
   }));
   return ok(c, { requests });
+});
+
+/**
+ * Device asks whether it should currently be capturing (own-device camera
+ * mode). The device uses this to start/stop its visible foreground camera
+ * service. Requires the camera consent flag to be on.
+ */
+deviceSelfRoutes.get("/device/camera/active", async (c) => {
+  const deviceId = c.get("deviceId")!;
+  const settings = await c.env.DB.prepare(
+    "SELECT camera_feature_enabled FROM device_settings WHERE device_id = ?",
+  )
+    .bind(deviceId)
+    .first<{ camera_feature_enabled: number }>();
+  if (!settings || settings.camera_feature_enabled !== 1) {
+    return ok(c, { active: false, sessionId: null, intervalSeconds: CAMERA.defaultSnapshotIntervalSeconds });
+  }
+  const session = await c.env.DB.prepare(
+    "SELECT id FROM camera_sessions WHERE device_id = ? AND status IN ('requested','authorized','active') ORDER BY created_at DESC LIMIT 1",
+  )
+    .bind(deviceId)
+    .first<{ id: string }>();
+  return ok(c, {
+    active: Boolean(session),
+    sessionId: session?.id ?? null,
+    intervalSeconds: CAMERA.defaultSnapshotIntervalSeconds,
+  });
+});
+
+/**
+ * Device uploads a JPEG snapshot (raw bytes) for the active camera session.
+ * Stored privately in R2. Requires camera consent + an active session.
+ */
+deviceSelfRoutes.post("/device/camera/snapshot", async (c) => {
+  const deviceId = c.get("deviceId")!;
+  const settings = await c.env.DB.prepare(
+    "SELECT camera_feature_enabled FROM device_settings WHERE device_id = ?",
+  )
+    .bind(deviceId)
+    .first<{ camera_feature_enabled: number }>();
+  if (!settings || settings.camera_feature_enabled !== 1) {
+    throw errors.featureDisabled("Camera is not enabled for this device");
+  }
+  const session = await c.env.DB.prepare(
+    "SELECT id FROM camera_sessions WHERE device_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+  )
+    .bind(deviceId)
+    .first<{ id: string }>();
+  if (!session) throw errors.notFound("No active camera session");
+
+  const bytes = new Uint8Array(await c.req.raw.arrayBuffer());
+  if (bytes.byteLength === 0) throw errors.badRequest("Empty snapshot body");
+  if (bytes.byteLength > CAMERA.maxSnapshotBytes) {
+    throw errors.badRequest("Snapshot too large");
+  }
+
+  const now = Date.now();
+  const assetId = uuid();
+  const key = `snapshots/${deviceId}/${session.id}/${now}.jpg`;
+  await c.env.MEDIA.put(key, bytes, {
+    httpMetadata: { contentType: "image/jpeg" },
+  });
+  await c.env.DB.prepare(
+    `INSERT INTO media_assets
+       (id, device_id, camera_session_id, r2_key, status, content_type, size_bytes, created_at)
+     VALUES (?, ?, ?, ?, 'available', 'image/jpeg', ?, ?)`,
+  )
+    .bind(assetId, deviceId, session.id, key, bytes.byteLength, now)
+    .run();
+  await c.env.DB.prepare("UPDATE devices SET last_seen_at = ? WHERE id = ?")
+    .bind(now, deviceId)
+    .run();
+  await writeAudit(c.env.DB, {
+    id: uuid(),
+    action: "camera.snapshot_received",
+    actorType: "device",
+    actorId: deviceId,
+    deviceId,
+    requestId: c.get("requestId"),
+    metadata: { assetId, sessionId: session.id, sizeBytes: bytes.byteLength },
+    createdAt: now,
+  });
+  return ok(c, { assetId, sizeBytes: bytes.byteLength }, 201);
 });
 
 /** Device updates a request's status (acknowledge / complete / fail). */

@@ -128,9 +128,10 @@ export const deviceAuth: MW = async (c, next) => {
     throw errors.unauthorized("Unknown or inactive device");
   }
 
-  // Recompute the canonical signing string. Body hash must match exactly.
-  const rawBody = await c.req.raw.clone().text();
-  const bodyHashHex = await sha256Hex(rawBody);
+  // Recompute the canonical signing string. Body hash is over the RAW bytes
+  // (works for both JSON and binary snapshot uploads).
+  const rawBody = await c.req.raw.clone().arrayBuffer();
+  const bodyHashHex = await sha256Hex(new Uint8Array(rawBody));
   const message = buildSigningString({
     method: c.req.method,
     path: new URL(c.req.url).pathname,

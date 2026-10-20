@@ -98,6 +98,9 @@ export const AUDIT_ACTION = [
   "device.revoked",
   "device.request_created",
   "device.request_updated",
+  "camera.session_started",
+  "camera.session_ended",
+  "camera.snapshot_received",
   "auth.device_rejected",
   "auth.owner_rejected",
   "auth.replay_detected",
@@ -123,6 +126,25 @@ export const SIGNING = {
 
 /** A device is considered offline if no status was reported within this window. */
 export const DEVICE_OFFLINE_AFTER_MS = 3 * 60 * 1000;
+
+/**
+ * Camera (own-device IP-camera / CCTV mode) parameters.
+ *
+ * This is overt, owner-operated camera use: capture runs in a visible
+ * foreground service with an ongoing notification and the OS camera indicator;
+ * it is gated behind the device's cameraFeatureEnabled consent flag. There is
+ * no hidden or background capture.
+ */
+export const CAMERA = {
+  /** Default seconds between snapshot captures (near-live refresh). */
+  defaultSnapshotIntervalSeconds: 3,
+  minSnapshotIntervalSeconds: 1,
+  maxSnapshotIntervalSeconds: 60,
+  /** Reject snapshot uploads larger than this many bytes. */
+  maxSnapshotBytes: 5_000_000,
+  /** An active camera session with no snapshot within this window is stale. */
+  sessionStaleAfterMs: 2 * 60 * 1000,
+} as const;
 
 /** Pairing code: single-use, short-lived. */
 export const PAIRING = {

@@ -441,3 +441,131 @@ describe("command queue round-trip (owner -> device -> owner)", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("camera (own-device IP-camera mode)", () => {
+  async function enabledDevice() {
+    const owner = await seedOwner();
+    const token = await login(SELF, owner.email, owner.password);
+    const keys = await generateDeviceKeys();
+    const { deviceId } = await enrollDevice(SELF, token, keys);
+    // Owner enables the camera consent flag.
+    await SELF.fetch(url(`/devices/${deviceId}/settings`), {
+      method: "PUT",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ cameraFeatureEnabled: true }),
+    });
+    return { token, keys, deviceId };
+  }
+
+  it("refuses to start the camera while consent is off", async () => {
+    const owner = await seedOwner();
+    const token = await login(SELF, owner.email, owner.password);
+    const keys = await generateDeviceKeys();
+    const { deviceId } = await enrollDevice(SELF, token, keys);
+    const res = await SELF.fetch(url(`/devices/${deviceId}/camera/start`), {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(403);
+    expect((await jsonOf(res)).error.code).toBe("feature_disabled");
+  });
+
+  it("runs the full snapshot loop: start, device sees active, upload, owner views", async () => {
+    const { token, keys, deviceId } = await enabledDevice();
+
+    // Owner starts the camera.
+    const start = await SELF.fetch(url(`/devices/${deviceId}/camera/start`), {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(start.status).toBe(201);
+
+    // Device polls and sees it should capture.
+    const pollPath = `${base}/device/camera/active`;
+    const pollHeaders = await signedHeaders(keys, deviceId, "GET", pollPath, "");
+    const poll = await SELF.fetch(url("/device/camera/active"), { headers: pollHeaders });
+    const pollData = (await jsonOf(poll)).data;
+    expect(pollData.active).toBe(true);
+    expect(pollData.sessionId).toBeTruthy();
+
+    // Device uploads a JPEG snapshot (raw bytes, signed over those bytes).
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 1, 2, 3, 4, 0xff, 0xd9]);
+    const snapPath = `${base}/device/camera/snapshot`;
+    const snapHeaders = await signedHeaders(keys, deviceId, "POST", snapPath, jpeg);
+    const upload = await SELF.fetch(url("/device/camera/snapshot"), {
+      method: "POST",
+      headers: { ...snapHeaders, "content-type": "image/jpeg" },
+      body: jpeg,
+    });
+    expect(upload.status).toBe(201);
+    const assetId = (await jsonOf(upload)).data.assetId as string;
+
+    // Owner sees the latest snapshot metadata.
+    const state = await SELF.fetch(url(`/devices/${deviceId}/camera`), {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const stateData = (await jsonOf(state)).data;
+    expect(stateData.session.status).toBe("active");
+    expect(stateData.latestSnapshot.assetId).toBe(assetId);
+
+    // Owner downloads the JPEG bytes and they match what was uploaded.
+    const img = await SELF.fetch(url(`/camera/snapshots/${assetId}`), {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(img.status).toBe(200);
+    expect(img.headers.get("content-type")).toBe("image/jpeg");
+    const got = new Uint8Array(await img.arrayBuffer());
+    expect(Array.from(got)).toEqual(Array.from(jpeg));
+  });
+
+  it("stops the camera and then rejects further snapshots", async () => {
+    const { token, keys, deviceId } = await enabledDevice();
+    await SELF.fetch(url(`/devices/${deviceId}/camera/start`), {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await SELF.fetch(url(`/devices/${deviceId}/camera/stop`), {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    const poll = await signedHeaders(keys, deviceId, "GET", `${base}/device/camera/active`, "");
+    const active = (await jsonOf(await SELF.fetch(url("/device/camera/active"), { headers: poll }))).data;
+    expect(active.active).toBe(false);
+
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+    const snapHeaders = await signedHeaders(keys, deviceId, "POST", `${base}/device/camera/snapshot`, jpeg);
+    const upload = await SELF.fetch(url("/device/camera/snapshot"), {
+      method: "POST",
+      headers: { ...snapHeaders, "content-type": "image/jpeg" },
+      body: jpeg,
+    });
+    expect(upload.status).toBe(404);
+  });
+
+  it("does not let another owner view snapshots", async () => {
+    const { token, keys, deviceId } = await enabledDevice();
+    await SELF.fetch(url(`/devices/${deviceId}/camera/start`), {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const jpeg = new Uint8Array([0xff, 0xd8, 0x11, 0x22, 0xff, 0xd9]);
+    const snapHeaders = await signedHeaders(keys, deviceId, "POST", `${base}/device/camera/snapshot`, jpeg);
+    const assetId = (
+      await jsonOf(
+        await SELF.fetch(url("/device/camera/snapshot"), {
+          method: "POST",
+          headers: { ...snapHeaders, "content-type": "image/jpeg" },
+          body: jpeg,
+        }),
+      )
+    ).data.assetId as string;
+
+    const other = await seedOwner();
+    const otherToken = await login(SELF, other.email, other.password);
+    const res = await SELF.fetch(url(`/camera/snapshots/${assetId}`), {
+      headers: { authorization: `Bearer ${otherToken}` },
+    });
+    expect(res.status).toBe(404);
+  });
+});

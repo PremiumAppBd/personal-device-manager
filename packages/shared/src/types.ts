@@ -128,7 +128,23 @@ export interface AuditLogView {
   createdAt: string;
 }
 
-/** FUTURE PHASE view models (interface only; not produced in Phase 1). */
+/** Combined camera state for the dashboard (own-device camera mode). */
+export interface CameraStateView {
+  enabled: boolean;
+  session: {
+    id: string;
+    status: CameraSessionStatus;
+    createdAt: string;
+    startedAt: string | null;
+  } | null;
+  intervalSeconds: number;
+  latestSnapshot: {
+    assetId: string;
+    createdAt: string;
+    sizeBytes: number | null;
+  } | null;
+}
+
 export interface CameraSessionView {
   id: string;
   deviceId: string;

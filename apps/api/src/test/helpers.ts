@@ -120,7 +120,7 @@ export async function signedHeaders(
   deviceId: string,
   method: string,
   path: string,
-  rawBody: string,
+  rawBody: string | Uint8Array,
   overrides: { timestamp?: number; nonce?: string } = {},
 ): Promise<Record<string, string>> {
   const timestamp = overrides.timestamp ?? Date.now();
