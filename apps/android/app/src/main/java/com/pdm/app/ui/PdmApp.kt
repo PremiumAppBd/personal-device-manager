@@ -2,7 +2,6 @@ package com.pdm.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,7 +15,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -265,14 +263,13 @@ fun SecuritySettingsScreen(vm: AppViewModel, @Suppress("UNUSED_PARAMETER") nav: 
 fun CameraModeScreen(@Suppress("UNUSED_PARAMETER") nav: NavHostController) {
     val context = LocalContext.current
     var running by remember { mutableStateOf(false) }
-    var useFront by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
-            CameraForegroundService.start(context, useFront)
+            CameraForegroundService.start(context)
             running = true
             note = "Camera mode started. A persistent notification is shown while active."
         } else {
@@ -285,7 +282,7 @@ fun CameraModeScreen(@Suppress("UNUSED_PARAMETER") nav: NavHostController) {
             context, Manifest.permission.CAMERA,
         ) == PackageManager.PERMISSION_GRANTED
         if (granted) {
-            CameraForegroundService.start(context, useFront)
+            CameraForegroundService.start(context)
             running = true
             note = "Camera mode started. A persistent notification is shown while active."
         } else {
@@ -303,10 +300,11 @@ fun CameraModeScreen(@Suppress("UNUSED_PARAMETER") nav: NavHostController) {
                     "setting there. Nothing is hidden.",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Switch(checked = useFront, onCheckedChange = { useFront = it }, enabled = !running)
-                Text("  Use front camera", style = MaterialTheme.typography.bodyMedium)
-            }
+            Text(
+                "Which camera to use (back, front, or both) is chosen in the " +
+                    "dashboard device settings.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             if (!running) {
                 Button(onClick = { startCamera() }, modifier = Modifier.fillMaxWidth()) {
                     Text("Start camera mode")

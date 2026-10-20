@@ -32,7 +32,7 @@ test("enables camera mode and shows a live frame (demo)", async ({ page }) => {
   await page.getByText("My Pixel 9").click();
 
   // Turn on the camera consent toggle, then the camera card becomes usable.
-  await page.getByText("Camera (own-device mode)").first().click();
+  await page.getByRole("checkbox", { name: /Camera \(own-device mode\)/ }).click();
   await page.getByRole("button", { name: "Start camera" }).click();
 
   await expect(page.getByText("Live", { exact: true })).toBeVisible();

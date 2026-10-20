@@ -73,6 +73,7 @@ data class CameraActiveDto(
     val active: Boolean = false,
     val sessionId: String? = null,
     val intervalSeconds: Int = 3,
+    val lenses: List<String> = emptyList(),
 )
 
 @Serializable

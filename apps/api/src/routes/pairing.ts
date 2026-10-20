@@ -176,6 +176,7 @@ pairingRoutes.post("/enroll", async (c) => {
     settings: {
       statusIntervalSeconds: 900,
       cameraFeatureEnabled: false,
+      cameraLens: "back",
       smsFeatureEnabled: false,
       diagnosticsEnabled: true,
     },

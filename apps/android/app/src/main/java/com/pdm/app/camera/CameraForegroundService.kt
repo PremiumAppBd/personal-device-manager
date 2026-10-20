@@ -50,7 +50,7 @@ class CameraForegroundService : LifecycleService() {
     private val analysisExecutor = Executors.newSingleThreadExecutor()
     private lateinit var imageCapture: ImageCapture
     private var provider: ProcessCameraProvider? = null
-    @Volatile private var lensFront = false
+    private var boundFront: Boolean? = null
 
     override fun onBind(intent: Intent): IBinder? {
         super.onBind(intent)
@@ -59,9 +59,7 @@ class CameraForegroundService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        lensFront = intent?.getBooleanExtra(EXTRA_FRONT, false) ?: false
         startAsForeground("Starting camera…")
-        bindCamera()
         startCaptureLoop()
         return START_STICKY
     }
@@ -85,25 +83,29 @@ class CameraForegroundService : LifecycleService() {
         }
     }
 
-    private fun bindCamera() {
-        val future = ProcessCameraProvider.getInstance(this)
-        future.addListener({
-            val cameraProvider = future.get()
-            provider = cameraProvider
-            imageCapture = ImageCapture.Builder()
-                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                .build()
-            val selector =
-                if (lensFront) CameraSelector.DEFAULT_FRONT_CAMERA
-                else CameraSelector.DEFAULT_BACK_CAMERA
-            try {
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(this, selector, imageCapture)
-            } catch (_: Exception) {
-                // If binding fails (e.g. camera in use), stop cleanly.
-                stopSelf()
-            }
-        }, ContextCompat.getMainExecutor(this))
+    private suspend fun ensureProvider(): ProcessCameraProvider = withContext(Dispatchers.Main) {
+        provider ?: suspendCancellableCoroutine { cont ->
+            val future = ProcessCameraProvider.getInstance(this@CameraForegroundService)
+            future.addListener(
+                { cont.resume(future.get()) },
+                ContextCompat.getMainExecutor(this@CameraForegroundService),
+            )
+        }.also { provider = it }
+    }
+
+    /** Bind the requested lens (rebinding only when the lens changes). */
+    private suspend fun bindLens(front: Boolean) = withContext(Dispatchers.Main) {
+        val cp = ensureProvider()
+        if (boundFront == front && ::imageCapture.isInitialized) return@withContext
+        imageCapture = ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .build()
+        val selector =
+            if (front) CameraSelector.DEFAULT_FRONT_CAMERA
+            else CameraSelector.DEFAULT_BACK_CAMERA
+        cp.unbindAll()
+        cp.bindToLifecycle(this@CameraForegroundService, selector, imageCapture)
+        boundFront = front
     }
 
     private fun startCaptureLoop() {
@@ -114,12 +116,13 @@ class CameraForegroundService : LifecycleService() {
                 try {
                     val active = container.api.cameraActive()
                     waitSeconds = active.intervalSeconds.coerceIn(1, 60)
-                    if (active.active && ::imageCapture.isInitialized) {
-                        val jpeg = captureJpeg()
-                        if (jpeg != null) {
-                            container.api.uploadSnapshot(jpeg)
-                            updateNotification("Streaming to your dashboard")
+                    if (active.active && active.lenses.isNotEmpty()) {
+                        for (lens in active.lenses) {
+                            bindLens(lens == "front")
+                            val jpeg = captureJpeg()
+                            if (jpeg != null) container.api.uploadSnapshot(jpeg, lens)
                         }
+                        updateNotification("Streaming (${active.lenses.joinToString("+")})")
                     } else {
                         updateNotification("Camera on • idle (no active viewer)")
                     }
@@ -194,11 +197,10 @@ class CameraForegroundService : LifecycleService() {
     companion object {
         private const val CHANNEL_ID = "pdm_camera"
         private const val NOTIF_ID = 42
-        const val EXTRA_FRONT = "front"
 
-        fun start(context: Context, front: Boolean) {
+        /** Lens selection (back/front/both) is driven by the server settings. */
+        fun start(context: Context) {
             val intent = Intent(context, CameraForegroundService::class.java)
-                .putExtra(EXTRA_FRONT, front)
             ContextCompat.startForegroundService(context, intent)
         }
 

@@ -82,11 +82,16 @@ export const reportStatusSchema = z.object({
 export type ReportStatus = z.infer<typeof reportStatusSchema>;
 
 /** ---- Device settings (owner-controlled, synced to device) ---- */
+export const cameraLensSchema = z.enum(["back", "front", "both"]);
+export type CameraLens = z.infer<typeof cameraLensSchema>;
+
 export const deviceSettingsSchema = z.object({
   /** Reporting cadence hint for WorkManager on the device, in seconds. */
   statusIntervalSeconds: z.number().int().min(60).max(86_400),
   /** Master consent flags. All default OFF; features stay disabled until set. */
   cameraFeatureEnabled: z.boolean(),
+  /** Which lens(es) the device captures in camera mode. */
+  cameraLens: cameraLensSchema,
   smsFeatureEnabled: z.boolean(),
   /** Whether the device may upload non-sensitive diagnostics. */
   diagnosticsEnabled: z.boolean(),

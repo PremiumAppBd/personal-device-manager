@@ -66,6 +66,26 @@ function SettingsPanel({ device }: { device: DeviceView }) {
           checked={s.cameraFeatureEnabled}
           onChange={(v) => update.mutate({ cameraFeatureEnabled: v })}
         />
+        <div className="flex items-center justify-between py-2">
+          <span>
+            <span className="text-sm font-medium text-slate-200">Camera lens</span>
+            <span className="block text-xs text-slate-500">
+              Which camera to capture when camera mode is on.
+            </span>
+          </span>
+          <select
+            className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 disabled:opacity-50"
+            value={s.cameraLens}
+            disabled={!s.cameraFeatureEnabled}
+            onChange={(e) =>
+              update.mutate({ cameraLens: e.target.value as "back" | "front" | "both" })
+            }
+          >
+            <option value="back">Back</option>
+            <option value="front">Front</option>
+            <option value="both">Both</option>
+          </select>
+        </div>
         <Toggle
           label="SMS feature consent (not implemented)"
           description="Reserved flag. SMS reading is intentionally not built in this project."
@@ -149,16 +169,27 @@ function RequestsPanel({ device }: { device: DeviceView }) {
   );
 }
 
+const LENS_TILES: Array<{ lens: "back" | "front"; label: string; alt: string }> = [
+  { lens: "back", label: "Back camera", alt: "latest camera frame" },
+  { lens: "front", label: "Front camera", alt: "latest front frame" },
+];
+
 function CameraCard({ device }: { device: DeviceView }) {
   const { token } = useAuth();
   const enabled = device.settings.cameraFeatureEnabled;
   const [state, setState] = useState<CameraStateView | null>(null);
-  const [imgUrl, setImgUrl] = useState<string | null>(null);
+  const [urls, setUrls] = useState<{ back: string | null; front: string | null }>({
+    back: null,
+    front: null,
+  });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const lastAsset = useRef<string | null>(null);
+  const lastAsset = useRef<{ back: string | null; front: string | null }>({
+    back: null,
+    front: null,
+  });
 
-  // Poll camera state and refresh the latest snapshot (near-live view).
+  // Poll camera state and refresh the latest snapshot for each lens.
   useEffect(() => {
     if (!token || !enabled) return;
     let stopped = false;
@@ -170,14 +201,17 @@ function CameraCard({ device }: { device: DeviceView }) {
         if (stopped) return;
         setState(s);
         nextMs = Math.max(1000, s.intervalSeconds * 1000);
-        if (s.latestSnapshot && s.latestSnapshot.assetId !== lastAsset.current) {
-          lastAsset.current = s.latestSnapshot.assetId;
-          const blob = await dataSource.fetchSnapshot(token, s.latestSnapshot.assetId);
-          if (stopped) return;
-          setImgUrl((prev) => {
-            if (prev) URL.revokeObjectURL(prev);
-            return URL.createObjectURL(blob);
-          });
+        for (const { lens } of LENS_TILES) {
+          const snap = s.snapshots[lens];
+          if (snap && snap.assetId !== lastAsset.current[lens]) {
+            lastAsset.current[lens] = snap.assetId;
+            const blob = await dataSource.fetchSnapshot(token, snap.assetId);
+            if (stopped) return;
+            setUrls((prev) => {
+              if (prev[lens]) URL.revokeObjectURL(prev[lens] as string);
+              return { ...prev, [lens]: URL.createObjectURL(blob) };
+            });
+          }
         }
       } catch (e) {
         if (!stopped) setErr(e instanceof Error ? e.message : "camera error");
@@ -192,18 +226,22 @@ function CameraCard({ device }: { device: DeviceView }) {
     };
   }, [token, enabled, device.id]);
 
-  // Revoke the last object URL on unmount.
-  useEffect(() => () => {
-    if (imgUrl) URL.revokeObjectURL(imgUrl);
-  }, [imgUrl]);
+  // Revoke object URLs on unmount.
+  useEffect(
+    () => () => {
+      if (urls.back) URL.revokeObjectURL(urls.back);
+      if (urls.front) URL.revokeObjectURL(urls.front);
+    },
+    [urls],
+  );
 
   if (!enabled) {
     return (
       <Card>
         <h3 className="font-medium">Live camera</h3>
         <p className="mt-1 text-sm text-slate-400">
-          Turn on "Camera feature consent" in Settings to use this device as a
-          private camera. The device will show a persistent notification and the
+          Turn on "Camera (own-device mode)" in Settings to use this device as a
+          private camera. The device shows a persistent notification and the
           system camera indicator while active.
         </p>
       </Card>
@@ -211,6 +249,7 @@ function CameraCard({ device }: { device: DeviceView }) {
   }
 
   const active = state?.session?.status === "active";
+  const shownLenses = state?.lenses ?? ["back"];
   async function toggle(start: boolean) {
     if (!token) return;
     setBusy(true);
@@ -233,19 +272,26 @@ function CameraCard({ device }: { device: DeviceView }) {
         {active ? <Badge tone="success">Live</Badge> : <Badge tone="neutral">Off</Badge>}
       </div>
       <p className="mt-1 text-xs text-slate-500">
-        Near-live snapshots{state ? ` every ${state.intervalSeconds}s` : ""}. The
-        device shows a visible notification and the system camera indicator while
-        capturing.
+        Near-live snapshots{state ? ` every ${state.intervalSeconds}s` : ""} ·{" "}
+        {shownLenses.join(" + ")}. The device shows a visible notification and the
+        system camera indicator while capturing.
       </p>
 
-      <div className="mt-3 aspect-video w-full overflow-hidden rounded-lg bg-slate-950 ring-1 ring-slate-800">
-        {imgUrl ? (
-          <img src={imgUrl} alt="latest camera frame" className="h-full w-full object-contain" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
-            {active ? "Waiting for the first frame..." : "Camera is off."}
+      <div className={`mt-3 grid gap-3 ${shownLenses.length > 1 ? "sm:grid-cols-2" : ""}`}>
+        {LENS_TILES.filter((t) => shownLenses.includes(t.lens)).map((t) => (
+          <div key={t.lens}>
+            <div className="mb-1 text-xs text-slate-400">{t.label}</div>
+            <div className="aspect-video w-full overflow-hidden rounded-lg bg-slate-950 ring-1 ring-slate-800">
+              {urls[t.lens] ? (
+                <img src={urls[t.lens] as string} alt={t.alt} className="h-full w-full object-contain" />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                  {active ? "Waiting for the first frame..." : "Camera is off."}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        ))}
       </div>
 
       <div className="mt-3 flex gap-2">

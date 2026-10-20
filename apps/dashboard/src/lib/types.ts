@@ -31,6 +31,7 @@ export interface LoginResult {
 export interface DeviceSettingsInput {
   statusIntervalSeconds?: number;
   cameraFeatureEnabled?: boolean;
+  cameraLens?: "back" | "front" | "both";
   smsFeatureEnabled?: boolean;
   diagnosticsEnabled?: boolean;
 }

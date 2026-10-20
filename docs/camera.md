@@ -35,6 +35,21 @@ Dashboard (you)                 API + R2                 Phone (your camera)
    mode**. Grant the camera permission when asked. Pick front or back camera.
    The phone now shows a persistent "Camera active" notification.
 
+## Front, back, or both cameras
+
+In the device Settings on the dashboard, set **Camera lens** to `Back`, `Front`,
+or `Both`.
+
+- `Back` or `Front`: the phone streams that one camera.
+- `Both`: the phone **alternates** — it grabs a back frame, then a front frame,
+  each cycle, and the dashboard shows two tiles (back and front). You get images
+  from both cameras.
+
+Note on "both": true *simultaneous* front+back capture is only supported on some
+phones (Android concurrent-camera hardware). The alternating approach used here
+works on any phone; the two tiles update a moment apart rather than at the exact
+same instant.
+
 ## Daily use
 
 - **View:** open the device in the dashboard. The "Live camera" card shows the

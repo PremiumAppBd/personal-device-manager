@@ -73,6 +73,7 @@ export interface DeviceView {
   settings: {
     statusIntervalSeconds: number;
     cameraFeatureEnabled: boolean;
+    cameraLens: "back" | "front" | "both";
     smsFeatureEnabled: boolean;
     diagnosticsEnabled: boolean;
   };
@@ -128,6 +129,13 @@ export interface AuditLogView {
   createdAt: string;
 }
 
+export interface CameraSnapshotMeta {
+  assetId: string;
+  createdAt: string;
+  sizeBytes: number | null;
+  lens: "front" | "back" | null;
+}
+
 /** Combined camera state for the dashboard (own-device camera mode). */
 export interface CameraStateView {
   enabled: boolean;
@@ -138,11 +146,13 @@ export interface CameraStateView {
     startedAt: string | null;
   } | null;
   intervalSeconds: number;
-  latestSnapshot: {
-    assetId: string;
-    createdAt: string;
-    sizeBytes: number | null;
-  } | null;
+  /** Which lens(es) are being captured. */
+  lenses: Array<"front" | "back">;
+  /** Latest snapshot per lens. */
+  snapshots: {
+    back: CameraSnapshotMeta | null;
+    front: CameraSnapshotMeta | null;
+  };
 }
 
 export interface CameraSessionView {

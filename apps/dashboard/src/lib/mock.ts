@@ -44,6 +44,7 @@ const devices: DeviceView[] = [
     settings: {
       statusIntervalSeconds: 900,
       cameraFeatureEnabled: false,
+      cameraLens: "back",
       smsFeatureEnabled: false,
       diagnosticsEnabled: true,
     },
@@ -63,6 +64,7 @@ const devices: DeviceView[] = [
     settings: {
       statusIntervalSeconds: 3600,
       cameraFeatureEnabled: false,
+      cameraLens: "back",
       smsFeatureEnabled: false,
       diagnosticsEnabled: false,
     },
@@ -146,15 +148,21 @@ export const mockApi: DataSource = {
 
   getCamera: (_t, id): Promise<CameraStateView> => {
     const active = demoCameraActive.has(id);
+    const lens = devices.find((x) => x.id === id)?.settings.cameraLens ?? "back";
+    const lenses: Array<"front" | "back"> =
+      lens === "both" ? ["back", "front"] : lens === "front" ? ["front"] : ["back"];
+    const snap = (l: "front" | "back") =>
+      active && lenses.includes(l)
+        ? { assetId: `demo-snap-${id}-${l}-${Date.now()}`, createdAt: iso(Date.now()), sizeBytes: 2048, lens: l }
+        : null;
     return delay({
       enabled: true,
       session: active
         ? { id: "demo-cam-session", status: "active", createdAt: iso(now), startedAt: iso(now) }
         : null,
       intervalSeconds: 3,
-      latestSnapshot: active
-        ? { assetId: `demo-snap-${id}`, createdAt: iso(Date.now()), sizeBytes: 2048 }
-        : null,
+      lenses,
+      snapshots: { back: snap("back"), front: snap("front") },
     });
   },
   startCamera: (_t, id) => {

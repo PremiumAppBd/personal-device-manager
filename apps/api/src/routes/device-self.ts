@@ -36,10 +36,18 @@ deviceSelfRoutes.get("/device/settings", async (c) => {
   return ok(c, {
     statusIntervalSeconds: s.status_interval_seconds,
     cameraFeatureEnabled: s.camera_feature_enabled === 1,
+    cameraLens: s.camera_lens ?? "back",
     smsFeatureEnabled: s.sms_feature_enabled === 1,
     diagnosticsEnabled: s.diagnostics_enabled === 1,
   });
 });
+
+/** Expand the camera_lens setting into the concrete lenses to capture. */
+function lensesFor(cameraLens: string | undefined): Array<"back" | "front"> {
+  if (cameraLens === "both") return ["back", "front"];
+  if (cameraLens === "front") return ["front"];
+  return ["back"];
+}
 
 /** Device reports a non-sensitive status sample. */
 deviceSelfRoutes.post("/device/status", async (c) => {
@@ -133,12 +141,17 @@ deviceSelfRoutes.get("/device/requests", async (c) => {
 deviceSelfRoutes.get("/device/camera/active", async (c) => {
   const deviceId = c.get("deviceId")!;
   const settings = await c.env.DB.prepare(
-    "SELECT camera_feature_enabled FROM device_settings WHERE device_id = ?",
+    "SELECT camera_feature_enabled, camera_lens FROM device_settings WHERE device_id = ?",
   )
     .bind(deviceId)
-    .first<{ camera_feature_enabled: number }>();
+    .first<{ camera_feature_enabled: number; camera_lens: string }>();
   if (!settings || settings.camera_feature_enabled !== 1) {
-    return ok(c, { active: false, sessionId: null, intervalSeconds: CAMERA.defaultSnapshotIntervalSeconds });
+    return ok(c, {
+      active: false,
+      sessionId: null,
+      intervalSeconds: CAMERA.defaultSnapshotIntervalSeconds,
+      lenses: [],
+    });
   }
   const session = await c.env.DB.prepare(
     "SELECT id FROM camera_sessions WHERE device_id = ? AND status IN ('requested','authorized','active') ORDER BY created_at DESC LIMIT 1",
@@ -149,6 +162,7 @@ deviceSelfRoutes.get("/device/camera/active", async (c) => {
     active: Boolean(session),
     sessionId: session?.id ?? null,
     intervalSeconds: CAMERA.defaultSnapshotIntervalSeconds,
+    lenses: lensesFor(settings.camera_lens),
   });
 });
 
@@ -173,6 +187,10 @@ deviceSelfRoutes.post("/device/camera/snapshot", async (c) => {
     .first<{ id: string }>();
   if (!session) throw errors.notFound("No active camera session");
 
+  // Which lens produced this frame (?lens=front|back). Defaults to back.
+  const lensParam = c.req.query("lens");
+  const lens = lensParam === "front" ? "front" : "back";
+
   const bytes = new Uint8Array(await c.req.raw.arrayBuffer());
   if (bytes.byteLength === 0) throw errors.badRequest("Empty snapshot body");
   if (bytes.byteLength > CAMERA.maxSnapshotBytes) {
@@ -181,16 +199,16 @@ deviceSelfRoutes.post("/device/camera/snapshot", async (c) => {
 
   const now = Date.now();
   const assetId = uuid();
-  const key = `snapshots/${deviceId}/${session.id}/${now}.jpg`;
+  const key = `snapshots/${deviceId}/${session.id}/${lens}-${now}.jpg`;
   await c.env.MEDIA.put(key, bytes, {
     httpMetadata: { contentType: "image/jpeg" },
   });
   await c.env.DB.prepare(
     `INSERT INTO media_assets
-       (id, device_id, camera_session_id, r2_key, status, content_type, size_bytes, created_at)
-     VALUES (?, ?, ?, ?, 'available', 'image/jpeg', ?, ?)`,
+       (id, device_id, camera_session_id, r2_key, status, content_type, size_bytes, lens, created_at)
+     VALUES (?, ?, ?, ?, 'available', 'image/jpeg', ?, ?, ?)`,
   )
-    .bind(assetId, deviceId, session.id, key, bytes.byteLength, now)
+    .bind(assetId, deviceId, session.id, key, bytes.byteLength, lens, now)
     .run();
   await c.env.DB.prepare("UPDATE devices SET last_seen_at = ? WHERE id = ?")
     .bind(now, deviceId)
@@ -202,10 +220,10 @@ deviceSelfRoutes.post("/device/camera/snapshot", async (c) => {
     actorId: deviceId,
     deviceId,
     requestId: c.get("requestId"),
-    metadata: { assetId, sessionId: session.id, sizeBytes: bytes.byteLength },
+    metadata: { assetId, sessionId: session.id, sizeBytes: bytes.byteLength, lens },
     createdAt: now,
   });
-  return ok(c, { assetId, sizeBytes: bytes.byteLength }, 201);
+  return ok(c, { assetId, lens, sizeBytes: bytes.byteLength }, 201);
 });
 
 /** Device updates a request's status (acknowledge / complete / fail). */

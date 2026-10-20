@@ -506,7 +506,7 @@ describe("camera (own-device IP-camera mode)", () => {
     });
     const stateData = (await jsonOf(state)).data;
     expect(stateData.session.status).toBe("active");
-    expect(stateData.latestSnapshot.assetId).toBe(assetId);
+    expect(stateData.snapshots.back.assetId).toBe(assetId);
 
     // Owner downloads the JPEG bytes and they match what was uploaded.
     const img = await SELF.fetch(url(`/camera/snapshots/${assetId}`), {
@@ -541,6 +541,52 @@ describe("camera (own-device IP-camera mode)", () => {
       body: jpeg,
     });
     expect(upload.status).toBe(404);
+  });
+
+  it("captures both lenses when cameraLens is 'both'", async () => {
+    const { token, keys, deviceId } = await enabledDevice();
+    // Switch to both lenses.
+    await SELF.fetch(url(`/devices/${deviceId}/settings`), {
+      method: "PUT",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ cameraLens: "both" }),
+    });
+    await SELF.fetch(url(`/devices/${deviceId}/camera/start`), {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    // Device learns it should capture both lenses.
+    const pollHeaders = await signedHeaders(keys, deviceId, "GET", `${base}/device/camera/active`, "");
+    const active = (await jsonOf(await SELF.fetch(url("/device/camera/active"), { headers: pollHeaders }))).data;
+    expect(active.lenses.sort()).toEqual(["back", "front"]);
+
+    // Upload one frame per lens.
+    for (const lens of ["back", "front"] as const) {
+      const jpeg = new Uint8Array([0xff, 0xd8, lens === "back" ? 1 : 2, 0xff, 0xd9]);
+      // The signature covers the pathname only (no query string).
+      const path = `${base}/device/camera/snapshot`;
+      const headers = await signedHeaders(keys, deviceId, "POST", path, jpeg);
+      const res = await SELF.fetch(url(`/device/camera/snapshot?lens=${lens}`), {
+        method: "POST",
+        headers: { ...headers, "content-type": "image/jpeg" },
+        body: jpeg,
+      });
+      expect(res.status).toBe(201);
+      expect((await jsonOf(res)).data.lens).toBe(lens);
+    }
+
+    // Owner sees a latest snapshot for each lens.
+    const state = (
+      await jsonOf(
+        await SELF.fetch(url(`/devices/${deviceId}/camera`), {
+          headers: { authorization: `Bearer ${token}` },
+        }),
+      )
+    ).data;
+    expect(state.snapshots.back).not.toBeNull();
+    expect(state.snapshots.front).not.toBeNull();
+    expect(state.snapshots.front.lens).toBe("front");
   });
 
   it("does not let another owner view snapshots", async () => {

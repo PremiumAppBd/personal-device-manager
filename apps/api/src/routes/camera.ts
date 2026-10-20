@@ -41,7 +41,14 @@ interface MediaAssetRow {
   status: string;
   content_type: string;
   size_bytes: number | null;
+  lens: string | null;
   created_at: number;
+}
+
+function lensesFor(cameraLens: string | undefined): Array<"back" | "front"> {
+  if (cameraLens === "both") return ["back", "front"];
+  if (cameraLens === "front") return ["front"];
+  return ["back"];
 }
 
 async function loadOwned(
@@ -135,15 +142,30 @@ cameraRoutes.post("/devices/:id/camera/stop", async (c) => {
   return ok(c, { stopped: true });
 });
 
-/** Current camera state + latest snapshot metadata. */
+/** Current camera state + latest snapshot metadata per lens. */
 cameraRoutes.get("/devices/:id/camera", async (c) => {
   const { device, settings } = await loadOwned(c, c.req.param("id"));
   const session = await activeSession(c, device.id);
-  const latest = await c.env.DB.prepare(
-    "SELECT * FROM media_assets WHERE device_id = ? AND content_type = 'image/jpeg' ORDER BY created_at DESC LIMIT 1",
-  )
-    .bind(device.id)
-    .first<MediaAssetRow>();
+
+  const latestForLens = async (lens: "back" | "front") => {
+    // Match this lens, tolerating older rows with a NULL lens as 'back'.
+    const row = await c.env.DB.prepare(
+      `SELECT * FROM media_assets
+       WHERE device_id = ? AND content_type = 'image/jpeg'
+         AND (lens = ? OR (lens IS NULL AND ? = 'back'))
+       ORDER BY created_at DESC LIMIT 1`,
+    )
+      .bind(device.id, lens, lens)
+      .first<MediaAssetRow>();
+    return row
+      ? {
+          assetId: row.id,
+          createdAt: new Date(row.created_at).toISOString(),
+          sizeBytes: row.size_bytes,
+          lens: (row.lens as "front" | "back" | null) ?? "back",
+        }
+      : null;
+  };
 
   const view: CameraStateView = {
     enabled: settings.camera_feature_enabled === 1,
@@ -156,13 +178,11 @@ cameraRoutes.get("/devices/:id/camera", async (c) => {
         }
       : null,
     intervalSeconds: CAMERA.defaultSnapshotIntervalSeconds,
-    latestSnapshot: latest
-      ? {
-          assetId: latest.id,
-          createdAt: new Date(latest.created_at).toISOString(),
-          sizeBytes: latest.size_bytes,
-        }
-      : null,
+    lenses: lensesFor(settings.camera_lens),
+    snapshots: {
+      back: await latestForLens("back"),
+      front: await latestForLens("front"),
+    },
   };
   return ok(c, view);
 });

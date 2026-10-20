@@ -128,6 +128,7 @@ deviceRoutes.get("/devices/:id/settings", async (c) => {
   return ok(c, {
     statusIntervalSeconds: settings.status_interval_seconds,
     cameraFeatureEnabled: settings.camera_feature_enabled === 1,
+    cameraLens: settings.camera_lens ?? "back",
     smsFeatureEnabled: settings.sms_feature_enabled === 1,
     diagnosticsEnabled: settings.diagnostics_enabled === 1,
   });
@@ -145,6 +146,7 @@ deviceRoutes.put("/devices/:id/settings", async (c) => {
       body.cameraFeatureEnabled != null
         ? body.cameraFeatureEnabled ? 1 : 0
         : settings.camera_feature_enabled,
+    camera_lens: body.cameraLens ?? settings.camera_lens ?? "back",
     sms_feature_enabled:
       body.smsFeatureEnabled != null
         ? body.smsFeatureEnabled ? 1 : 0
@@ -158,12 +160,13 @@ deviceRoutes.put("/devices/:id/settings", async (c) => {
   await c.env.DB.prepare(
     `UPDATE device_settings
        SET status_interval_seconds = ?, camera_feature_enabled = ?,
-           sms_feature_enabled = ?, diagnostics_enabled = ?, updated_at = ?
+           camera_lens = ?, sms_feature_enabled = ?, diagnostics_enabled = ?, updated_at = ?
      WHERE device_id = ?`,
   )
     .bind(
       next.status_interval_seconds,
       next.camera_feature_enabled,
+      next.camera_lens,
       next.sms_feature_enabled,
       next.diagnostics_enabled,
       now,
@@ -185,6 +188,7 @@ deviceRoutes.put("/devices/:id/settings", async (c) => {
   return ok(c, {
     statusIntervalSeconds: next.status_interval_seconds,
     cameraFeatureEnabled: next.camera_feature_enabled === 1,
+    cameraLens: next.camera_lens,
     smsFeatureEnabled: next.sms_feature_enabled === 1,
     diagnosticsEnabled: next.diagnostics_enabled === 1,
   });

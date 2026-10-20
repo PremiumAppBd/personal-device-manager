@@ -132,10 +132,14 @@ class ApiClient(
         json.decodeFromString(CameraActiveDto.serializer(), data.toString())
     }
 
-    /** Upload a single JPEG snapshot (raw bytes) for the active camera session. */
-    suspend fun uploadSnapshot(jpeg: ByteArray): Unit = withContext(Dispatchers.IO) {
+    /**
+     * Upload a single JPEG snapshot (raw bytes) for the active camera session.
+     * The lens is sent as a query param; the signature covers the path only.
+     */
+    suspend fun uploadSnapshot(jpeg: ByteArray, lens: String): Unit = withContext(Dispatchers.IO) {
         val deviceId = config.deviceId() ?: throw ApiException("not_enrolled", "device not enrolled")
-        signedPostBytes("/device/camera/snapshot", deviceId, jpeg, "image/jpeg")
+        val query = if (lens == "front") "?lens=front" else "?lens=back"
+        signedPostBytes("/device/camera/snapshot", deviceId, jpeg, "image/jpeg", query)
     }
 
     private fun signedPost(path: String, deviceId: String, body: String): JsonObject {
@@ -152,10 +156,12 @@ class ApiClient(
         deviceId: String,
         bytes: ByteArray,
         contentType: String,
+        query: String = "",
     ): JsonObject {
+        // Sign the path only; the query string is not part of the signature.
         val headers = signHeaders("POST", path, deviceId, bytes)
         val media = contentType.toMediaType()
-        val builder = Request.Builder().url(url(path)).post(bytes.toRequestBody(media))
+        val builder = Request.Builder().url(url(path) + query).post(bytes.toRequestBody(media))
         headers.forEach { (k, v) -> builder.header(k, v) }
         http.newCall(builder.build()).execute().use { res ->
             return unwrap(res.body?.string().orEmpty(), res.code)

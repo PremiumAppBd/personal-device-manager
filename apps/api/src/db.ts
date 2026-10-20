@@ -41,6 +41,7 @@ export interface DeviceSettingsRow {
   device_id: string;
   status_interval_seconds: number;
   camera_feature_enabled: number;
+  camera_lens: string;
   sms_feature_enabled: number;
   diagnostics_enabled: number;
   updated_at: number;
@@ -138,6 +139,7 @@ export function deviceRowToView(
     settings: {
       statusIntervalSeconds: settings.status_interval_seconds,
       cameraFeatureEnabled: settings.camera_feature_enabled === 1,
+      cameraLens: (settings.camera_lens as "back" | "front" | "both") ?? "back",
       smsFeatureEnabled: settings.sms_feature_enabled === 1,
       diagnosticsEnabled: settings.diagnostics_enabled === 1,
     },
