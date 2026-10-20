@@ -80,4 +80,17 @@ export const liveApi: DataSource = {
     const data = await request<{ items: any[] }>("/audit", { token });
     return data.items;
   },
+  getCamera: (token, id) => request(`/devices/${id}/camera`, { token }),
+  async startCamera(token, id) {
+    await request(`/devices/${id}/camera/start`, { method: "POST", token });
+  },
+  async stopCamera(token, id) {
+    await request(`/devices/${id}/camera/stop`, { method: "POST", token });
+  },
+  async fetchSnapshot(token, assetId) {
+    const url = `${config.apiBaseUrl}${API_BASE_PATH}/camera/snapshots/${assetId}`;
+    const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new ApiClientError("snapshot_error", `Snapshot fetch failed (${res.status})`, res.status);
+    return res.blob();
+  },
 };

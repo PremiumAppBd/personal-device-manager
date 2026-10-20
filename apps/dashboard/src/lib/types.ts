@@ -1,5 +1,6 @@
 import type {
   AuditLogView,
+  CameraStateView,
   DeviceRequestType,
   DeviceRequestView,
   DeviceStatusView,
@@ -9,6 +10,7 @@ import type {
 
 export type {
   AuditLogView,
+  CameraStateView,
   DeviceRequestView,
   DeviceStatusView,
   DeviceView,
@@ -56,6 +58,11 @@ export interface DataSource {
   ): Promise<DeviceRequestView>;
   createPairing(token: string, label?: string): Promise<PairingChallengeView>;
   listAudit(token: string): Promise<AuditLogView[]>;
+  getCamera(token: string, id: string): Promise<CameraStateView>;
+  startCamera(token: string, id: string): Promise<void>;
+  stopCamera(token: string, id: string): Promise<void>;
+  /** Fetch a snapshot's JPEG bytes (auth required), as a Blob for display. */
+  fetchSnapshot(token: string, assetId: string): Promise<Blob>;
 }
 
 export class ApiClientError extends Error {

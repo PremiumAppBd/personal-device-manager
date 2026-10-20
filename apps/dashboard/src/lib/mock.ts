@@ -1,6 +1,7 @@
 import type { DeviceRequestType } from "@pdm/shared";
 import type {
   AuditLogView,
+  CameraStateView,
   DataSource,
   DeviceRequestView,
   DeviceStatusView,
@@ -142,4 +143,39 @@ export const mockApi: DataSource = {
       label: label ?? null,
     }),
   listAudit: () => delay(audit.map((a) => ({ ...a }))),
+
+  getCamera: (_t, id): Promise<CameraStateView> => {
+    const active = demoCameraActive.has(id);
+    return delay({
+      enabled: true,
+      session: active
+        ? { id: "demo-cam-session", status: "active", createdAt: iso(now), startedAt: iso(now) }
+        : null,
+      intervalSeconds: 3,
+      latestSnapshot: active
+        ? { assetId: `demo-snap-${id}`, createdAt: iso(Date.now()), sizeBytes: 2048 }
+        : null,
+    });
+  },
+  startCamera: (_t, id) => {
+    demoCameraActive.add(id);
+    return delay(undefined);
+  },
+  stopCamera: (_t, id) => {
+    demoCameraActive.delete(id);
+    return delay(undefined);
+  },
+  fetchSnapshot: (_t, _assetId) => {
+    // A labeled placeholder "frame" so demo mode shows a refreshing image.
+    const t = new Date().toLocaleTimeString();
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">` +
+      `<rect width="100%" height="100%" fill="#0b1120"/>` +
+      `<text x="50%" y="46%" fill="#8ab4ff" font-family="monospace" font-size="26" text-anchor="middle">DEMO CAMERA FRAME</text>` +
+      `<text x="50%" y="58%" fill="#64748b" font-family="monospace" font-size="18" text-anchor="middle">${t}</text>` +
+      `</svg>`;
+    return delay(new Blob([svg], { type: "image/svg+xml" }));
+  },
 };
+
+const demoCameraActive = new Set<string>();

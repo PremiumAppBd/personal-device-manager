@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { DeviceView } from "../lib/types";
+import type { CameraStateView, DeviceView } from "../lib/types";
 import {
   useCreateRequest,
   useDevice,
@@ -8,6 +8,8 @@ import {
   useStatusHistory,
   useUpdateSettings,
 } from "../lib/queries";
+import { dataSource } from "../lib/source";
+import { useAuth } from "../lib/auth";
 import { Badge, Button, Card, ErrorState, Meter, Spinner } from "../components/ui";
 
 function Toggle({
@@ -48,9 +50,8 @@ function SettingsPanel({ device }: { device: DeviceView }) {
       <h3 className="font-medium">Settings &amp; consent</h3>
       <p className="mt-1 text-xs text-slate-500">
         Feature consent flags are owner-controlled and synced to the device.
-        Enabling camera or SMS here records consent only; capture/collection is
-        not implemented in this phase and never starts without an on-device,
-        user-visible authorization.
+        Camera mode is for a device you own; while active the device shows a
+        persistent notification and the system camera indicator.
       </p>
       <div className="mt-3 divide-y divide-slate-800">
         <Toggle
@@ -60,14 +61,14 @@ function SettingsPanel({ device }: { device: DeviceView }) {
           onChange={(v) => update.mutate({ diagnosticsEnabled: v })}
         />
         <Toggle
-          label="Camera feature consent (future phase)"
-          description="Records consent. Capture is not enabled in Phase 1."
+          label="Camera (own-device mode)"
+          description="Allow this device to act as your private camera. Capture is always visible on the device."
           checked={s.cameraFeatureEnabled}
           onChange={(v) => update.mutate({ cameraFeatureEnabled: v })}
         />
         <Toggle
-          label="SMS feature consent (future phase)"
-          description="Records consent. SMS access is not enabled in Phase 1."
+          label="SMS feature consent (not implemented)"
+          description="Reserved flag. SMS reading is intentionally not built in this project."
           checked={s.smsFeatureEnabled}
           onChange={(v) => update.mutate({ smsFeatureEnabled: v })}
         />
@@ -148,6 +149,121 @@ function RequestsPanel({ device }: { device: DeviceView }) {
   );
 }
 
+function CameraCard({ device }: { device: DeviceView }) {
+  const { token } = useAuth();
+  const enabled = device.settings.cameraFeatureEnabled;
+  const [state, setState] = useState<CameraStateView | null>(null);
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const lastAsset = useRef<string | null>(null);
+
+  // Poll camera state and refresh the latest snapshot (near-live view).
+  useEffect(() => {
+    if (!token || !enabled) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      let nextMs = 3000;
+      try {
+        const s = await dataSource.getCamera(token, device.id);
+        if (stopped) return;
+        setState(s);
+        nextMs = Math.max(1000, s.intervalSeconds * 1000);
+        if (s.latestSnapshot && s.latestSnapshot.assetId !== lastAsset.current) {
+          lastAsset.current = s.latestSnapshot.assetId;
+          const blob = await dataSource.fetchSnapshot(token, s.latestSnapshot.assetId);
+          if (stopped) return;
+          setImgUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return URL.createObjectURL(blob);
+          });
+        }
+      } catch (e) {
+        if (!stopped) setErr(e instanceof Error ? e.message : "camera error");
+      } finally {
+        if (!stopped) timer = setTimeout(tick, nextMs);
+      }
+    };
+    void tick();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [token, enabled, device.id]);
+
+  // Revoke the last object URL on unmount.
+  useEffect(() => () => {
+    if (imgUrl) URL.revokeObjectURL(imgUrl);
+  }, [imgUrl]);
+
+  if (!enabled) {
+    return (
+      <Card>
+        <h3 className="font-medium">Live camera</h3>
+        <p className="mt-1 text-sm text-slate-400">
+          Turn on "Camera feature consent" in Settings to use this device as a
+          private camera. The device will show a persistent notification and the
+          system camera indicator while active.
+        </p>
+      </Card>
+    );
+  }
+
+  const active = state?.session?.status === "active";
+  async function toggle(start: boolean) {
+    if (!token) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      if (start) await dataSource.startCamera(token, device.id);
+      else await dataSource.stopCamera(token, device.id);
+      setState(await dataSource.getCamera(token, device.id));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "camera error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium">Live camera</h3>
+        {active ? <Badge tone="success">Live</Badge> : <Badge tone="neutral">Off</Badge>}
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        Near-live snapshots{state ? ` every ${state.intervalSeconds}s` : ""}. The
+        device shows a visible notification and the system camera indicator while
+        capturing.
+      </p>
+
+      <div className="mt-3 aspect-video w-full overflow-hidden rounded-lg bg-slate-950 ring-1 ring-slate-800">
+        {imgUrl ? (
+          <img src={imgUrl} alt="latest camera frame" className="h-full w-full object-contain" />
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+            {active ? "Waiting for the first frame..." : "Camera is off."}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        {active ? (
+          <Button variant="danger" disabled={busy} onClick={() => toggle(false)}>
+            {busy ? "..." : "Stop camera"}
+          </Button>
+        ) : (
+          <Button disabled={busy} onClick={() => toggle(true)}>
+            {busy ? "..." : "Start camera"}
+          </Button>
+        )}
+      </div>
+      {err && <p className="mt-2 text-sm text-red-400">{err}</p>}
+    </Card>
+  );
+}
+
 export function DeviceDetailPage() {
   const { id = "" } = useParams();
   const { data: device, isLoading, error } = useDevice(id);
@@ -201,6 +317,8 @@ export function DeviceDetailPage() {
           </p>
         </Card>
       )}
+
+      <CameraCard device={device} />
 
       <div className="grid gap-5 sm:grid-cols-2">
         <SettingsPanel device={device} />
