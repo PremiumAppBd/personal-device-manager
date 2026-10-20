@@ -58,6 +58,29 @@ same instant.
 - **Stop capturing entirely:** press **Stop camera mode** on the phone (or turn
   off the camera consent setting in the dashboard).
 
+## Permissions (one-time)
+
+When you install the APK (sideload), Android shows the app's declared
+permissions. The ones that need your explicit approval are requested once,
+in-app, from the **Permission center** screen (a single "Allow all required"
+button):
+
+- **Camera** — for camera mode.
+- **Notifications** — for the ongoing "camera active" / sync notifications.
+
+Internet and network-state are normal permissions granted automatically at
+install. Android does **not** allow granting camera/notification at install
+time; the one-time system prompts are required and cannot be skipped. After you
+allow them once, Android remembers — you will not be asked again.
+
+On a device you own and develop on, you can pre-grant with ADB so there are zero
+taps:
+
+```bash
+adb shell pm grant com.pdm.app android.permission.CAMERA
+adb shell pm grant com.pdm.app android.permission.POST_NOTIFICATIONS
+```
+
 ## Notes and limits
 
 - Snapshot interval defaults to a few seconds; it is a near-live view, not

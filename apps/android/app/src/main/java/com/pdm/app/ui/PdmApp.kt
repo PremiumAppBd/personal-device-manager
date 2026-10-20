@@ -2,6 +2,7 @@ package com.pdm.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import com.pdm.app.camera.CameraForegroundService
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -220,19 +222,88 @@ fun MonitoringScreen(vm: AppViewModel, @Suppress("UNUSED_PARAMETER") nav: NavHos
 
 @Composable
 fun PermissionCenterScreen(@Suppress("UNUSED_PARAMETER") nav: NavHostController) {
+    val context = LocalContext.current
+    var refresh by remember { mutableStateOf(0) }
+
+    fun granted(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+    // The runtime permissions this app actually needs.
+    val needsNotif = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    val tick = refresh // read so the screen re-evaluates after a grant
+    val cameraOk = granted(Manifest.permission.CAMERA) && tick >= 0
+    val notifOk = !needsNotif || granted(Manifest.permission.POST_NOTIFICATIONS)
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { refresh++ }
+
+    fun requestAll() {
+        val perms = mutableListOf(Manifest.permission.CAMERA)
+        if (needsNotif) perms.add(Manifest.permission.POST_NOTIFICATIONS)
+        launcher.launch(perms.toTypedArray())
+    }
+
+    val allGranted = cameraOk && notifOk
+
     ScreenScaffold("Permission center") { m ->
         Column(m, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
-                "This phase requests only the minimum permissions: network access and " +
-                    "notifications. Camera and SMS permissions are NOT requested and their " +
-                    "features are disabled.",
+                "Grant the permissions this app needs. You only do this once — " +
+                    "Android remembers your choice. Camera is used only in the " +
+                    "visible camera mode you turn on.",
                 style = MaterialTheme.typography.bodyMedium,
             )
+
+            Button(
+                onClick = { requestAll() },
+                enabled = !allGranted,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (allGranted) "All required permissions granted" else "Allow all required")
+            }
+
             Divider()
-            Row2("Internet / network state", "Granted at install (normal)")
-            Row2("Notifications", "Requested when needed (Android 13+)")
-            Row2("Camera", "Not requested in this phase")
-            Row2("SMS", "Not requested in this phase")
+            PermissionRow("Camera", "For visible camera mode (capture photos you view).", cameraOk) {
+                launcher.launch(arrayOf(Manifest.permission.CAMERA))
+            }
+            PermissionRow(
+                "Notifications",
+                "Shows the ongoing 'camera active' and sync notifications.",
+                notifOk,
+            ) {
+                if (needsNotif) launcher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+            }
+            Divider()
+            Row2("Internet / network state", "Granted automatically at install")
+            Row2("SMS", "Not requested — SMS is not used by this app")
+
+            Text(
+                "Note: Android does not allow granting camera/notification permission " +
+                    "at install time; the one-time prompts above are required by the " +
+                    "system. On your own device you can also pre-grant via ADB (see docs).",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    label: String,
+    description: String,
+    granted: Boolean,
+    onRequest: () -> Unit,
+) {
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Text(description, style = MaterialTheme.typography.bodySmall)
+        }
+        if (granted) {
+            Text("Granted", style = MaterialTheme.typography.labelMedium)
+        } else {
+            OutlinedButton(onClick = onRequest) { Text("Allow") }
         }
     }
 }
