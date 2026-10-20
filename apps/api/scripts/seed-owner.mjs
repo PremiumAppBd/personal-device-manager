@@ -11,6 +11,12 @@
  */
 import { execFileSync } from "node:child_process";
 import { webcrypto as crypto } from "node:crypto";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Run wrangler from the API package directory (where wrangler.toml lives),
+// regardless of the caller's current working directory.
+const API_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const ITERATIONS = 210_000;
 
@@ -66,6 +72,7 @@ VALUES ('${id}', '${esc(email)}', '${hash}', '${salt}', ${now}, ${now})
 ON CONFLICT(email) DO UPDATE SET password_hash='${hash}', password_salt='${salt}', updated_at=${now};`;
 
 const args = [
+  "exec",
   "wrangler",
   "d1",
   "execute",
@@ -76,5 +83,6 @@ const args = [
 ];
 
 console.log(`Seeding owner ${email} (${isLocal ? "local" : "remote"})...`);
-execFileSync("npx", args, { stdio: "inherit" });
+// Use the workspace-installed wrangler via pnpm, run from the API directory.
+execFileSync("pnpm", args, { stdio: "inherit", cwd: API_DIR });
 console.log("Done.");
