@@ -21,7 +21,7 @@ and instrumentation are documented as not-run.
 | 11 | Dashboard builds | PASS | `vite build` (110 modules) |
 | 12 | Mock mode isolated from production | PASS | source-selection unit test; no live->mock path |
 | 13 | No secrets committed | PASS | only `.dev.vars.example`; `.gitignore` + CI secret scan |
-| 14 | Unit + integration tests pass | PASS | 7 shared + 17 API + 5 dashboard unit + 2 e2e |
+| 14 | Unit + integration tests pass | PASS | 7 shared + 19 API + 5 dashboard unit + 2 e2e |
 | 15 | Hardware-dependent tests documented | PASS | this table + below |
 
 ### Not run in this environment (require external dependencies)
@@ -34,7 +34,18 @@ and instrumentation are documented as not-run.
   No remote resources were provisioned (by rule).
 - **Cloudflare Access end-to-end** — needs a configured Access application.
 
-## Future phases (designed-for interfaces exist)
+## Scope decision: remote camera and SMS are not implemented
+
+The owner confirmed this deployment is Cloudflare-based device monitoring. The
+remote camera capture, live video, snapshots, and SMS collection features are
+**intentionally not built** in this repository. A remotely controlled,
+sideloaded capture agent is surveillance tooling, so this project stops at
+device management: enrollment, authentication, non-sensitive monitoring,
+commands, settings, and audit. The schema and interfaces below remain as
+placeholders only; the command queue rejects camera/SMS request types with
+`feature_disabled`, and the Android build acknowledges them as "not supported".
+
+## Future-phase placeholders (interfaces only; not to be built as remote capture)
 
 ### Phase 2 — Camera (consent-gated, visible)
 - CameraX front/rear capture inside a typed `camera` foreground service.
