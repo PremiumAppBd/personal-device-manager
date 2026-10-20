@@ -89,4 +89,10 @@ round-trip.
 | POST | `/device/status` | device-signed |
 | GET | `/device/requests` | device-signed |
 | POST | `/device/requests/:id` | device-signed |
+| POST | `/devices/:id/camera/start` | owner (needs camera consent) |
+| POST | `/devices/:id/camera/stop` | owner |
+| GET | `/devices/:id/camera` | owner |
+| GET | `/camera/snapshots/:assetId` | owner |
+| GET | `/device/camera/active` | device-signed |
+| POST | `/device/camera/snapshot?lens=` | device-signed |
 | GET | `/audit` | owner |

@@ -64,6 +64,20 @@ Every response carries `x-request-id` and conservative security headers.
 - `POST /devices/:id/requests` — `{ type, payload? }` -> `DeviceRequestView` (201). Camera/SMS types -> `feature_disabled`.
 - `GET /devices/:id/requests` -> `{ requests[] }`.
 
+### Camera — own-device camera mode
+Owner *(ownership-checked; requires `cameraFeatureEnabled`)*:
+- `POST /devices/:id/camera/start` -> `{ sessionId, status }` (201). Off-consent -> `feature_disabled`.
+- `POST /devices/:id/camera/stop` -> `{ stopped: true }`.
+- `GET /devices/:id/camera` -> `CameraStateView` (session, `lenses`, `snapshots.back/front`).
+- `GET /camera/snapshots/:assetId` -> raw `image/jpeg` bytes (owner-auth).
+
+Device *(device-signed)*:
+- `GET /device/camera/active` -> `{ active, sessionId, intervalSeconds, lenses }`.
+- `POST /device/camera/snapshot?lens=back|front` — raw JPEG body -> `{ assetId, lens, sizeBytes }` (201).
+
+Settings include `cameraLens` (`back|front|both`), which drives the lenses the
+device captures.
+
 ### Device self-service *(device-signed)*
 - `GET /device/settings` -> settings.
 - `POST /device/status` — status sample -> `{ accepted, serverTime }`.
